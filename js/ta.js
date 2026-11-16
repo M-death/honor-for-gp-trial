@@ -1,0 +1,337 @@
+/* ---------- タイムアタック (1艇・大時計スタートから3周・級判定) ----------
+   The time is a race time: from the hand hitting zero to the finish line on the 3rd lap. Calm water, an average
+   motor (出足・伸び1.0), and only a trace of the race's fade (水面の荒れ・熱ダレ, d161: FADE.ta) — alone on the water it holds its speed.
+   フライング・出遅れ・転覆・内側航走 end the run with no record. The best run is kept in this browser and comes back
+   as a ghost boat. */
+// d148–d152: the turns (and the exits) got wider (GRIP_BASE), so the old bests were reset — a new key; the old 'honorGP.ta' is left unread
+// d157: the turns slide now (ドリフト) — the old bests were reset again (d158: more slide and the hull's bank; d159: deep bank pays; d161: less fade in タイムアタック — reset each time)
+// d236 (まえ: 住之江は別で集計): the key carries the venue — 練習コース keeps 'honorGP.ta.d225' (its records stay), 住之江 is 'honorGP.ta.d225.suminoe'
+// d262 (まえ: ランキングは一度リセット、これから入れ直す): new motor (d260) + new bands (d261) → a new key for both courses;
+// the d225 records stay in storage and on the server (the 全体ランキング can still show them by version).
+// d265 (まえ: ゴーストと位置がずれるからリセットして): the solo start moved 10 m inside (d264, START.y 30 → 20) → a new key again; d262 records stay viewable by version.
+const TA = { laps: 3, keyBase: 'honorGP.ta.d265', key: 'honorGP.ta.d265' + VENUE.taSuffix, ghostDt: 0.1, failWait: 1.8, logKey: 'hfgp-ta-logs', logKeep: 10 };
+// 級: the slowest time (s) that still earns it. CPU 1艇 on calm water, average motor (d130, median):
+// A1★ 1'47"7  A1 1'48"6  A2 1'49"6  B1 1'53"9  B2 1'59"6. d132: まえ set the bands — 記念クラス is beyond the CPU's best.
+// d136: エクストラ (まえ) — GP覇者 and レジェンド sit above 記念クラス
+const TA_EXTRA = ['レジェンド', 'GP覇者'];
+// d152 (まえ): bands set to 記念 1'45"0, A1 1'47"0, B2 1'58"0 (CPU 1艇 with fade: 記念 1'45"0 A1★ 1'48"0 A1 1'48"6 A2 1'48"7 B1 1'51"2 B2 1'57"9)
+// (old d132/d136: レジェンド 1'43"0 GP覇者 1'44"0 記念 1'45"0 A1 1'46"5 A2 1'50"0 B1 1'54"0 B2 2'00"0)
+// d161 (まえ): タイムアタック keeps only a fifth of the race's lap fade — about 2 s faster, so every band moved 2 s with it
+// (CPU 1艇: 記念 1'43"3 A1★ 1'45"2 A1 1'45"7 A2 1'46"7 B1 1'49"1)
+// d165 (まえ): titles only, not race-time targets — レジェンド 1'42"0 GP覇者 1'43"0 記念 1'44"5 A1 1'46"0 A2 1'48"0 B1 1'52"0 B2 1'55"0
+// d225 (まえ: real times can't get that quick): top speed 81 → 80 km/h (physics.js THRUST) makes every run slower, and the titles move
+// 1.5 s from d165 — the fastest real 3-lap time since the reduced-output motors is 1'44"2 (芦屋 2018-12-09, boatrace.jp). Records reset (TA.key).
+// d261 (まえ: ランクは目安、全コースこの案で固定): the d260 solo motor (伸び 1.025) made the CPU ~1 s (top) to ~2.5 s (bottom) quicker,
+// so every band moved with it. CPU 1艇 練習コース (median of 5): 記念 1'45"1 TOP 1'46"9 A1 1'47"4 A2 1'48"4 B1 1'51"4 B2 1'56"7. One table for every course.
+const TA_RANKS = [['レジェンド', 102.5], ['GP覇者', 103.5], ['記念クラス', 104.5], ['A1', 106.5], ['A2', 108.5], ['B1', 111.5], ['B2', 115.0], ['ルーキー', Infinity]];
+const ta = { on: false, zero: 0, lastAt: 0, laps: [], st: null, path: [], nextPt: 0, done: false, log: [], ev: [], corners: [], cur: null, cSide: -1 };
+// the best run belongs to the player chosen in the practice menu (player.js)
+let taBest = null;
+// d218 端末内ランキング (まえ): the device's 10 best タイムアタック runs, every player together (one name can hold several places).
+// Kept with the TA bands' version (TA.key) so a reset of the records resets it too. The first time, the players' saved bests seed it.
+const TA_RANK = { get key() { return TA.key + '.rank'; }, keep: 10 };
+function taRankLoad() {
+  let a = null;
+  try { a = JSON.parse(localStorage.getItem(TA_RANK.key) || 'null'); } catch (e) {}
+  if (!Array.isArray(a)) {
+    a = [];
+    for (const n of ['', ...(players.list || [])]) {
+      try { const b = JSON.parse(localStorage.getItem(n ? `${TA.key}@${n}` : TA.key) || 'null'); if (b && b.t) a.push({ n: n || 'ゲスト', t: b.t, st: b.st ?? null, rank: taRank(b.t), at: b.at || 0 }); } catch (e) {}
+    }
+    a.sort((p, q) => p.t - q.t); a = a.slice(0, TA_RANK.keep); taRankSave(a);
+  }
+  return a;
+}
+function taRankSave(a) { try { localStorage.setItem(TA_RANK.key, JSON.stringify(a)); } catch (e) {} }
+// a finished run: returns its place (1–10) or 0 when it didn't make the list
+function taRankAdd(t, st) {
+  const a = taRankLoad(), e = { n: playerName(), t, st, rank: taRank(t), at: Date.now() };
+  a.push(e); a.sort((p, q) => p.t - q.t || p.at - q.at);
+  const place = a.indexOf(e) + 1; taRankSave(a.slice(0, TA_RANK.keep));
+  return place <= TA_RANK.keep ? place : 0;
+}
+function taRankDrop(name) { taRankSave(taRankLoad().filter(e => e.n !== name)); }
+function taRankTable(box, mark) {
+  const a = taRankLoad(); box.textContent = '';
+  const tab = document.createElement('table'); tab.className = 'mtab rk';
+  const tr = (cells, th, hi) => { const r = document.createElement('tr'); if (hi) r.className = 'hi'; cells.forEach(v => { const c = document.createElement(th ? 'th' : 'td'); c.textContent = v; r.appendChild(c); }); tab.appendChild(r); };
+  tr(['順位', '名前', 'タイム', '級', 'ST', '日付'], true);
+  const d2 = v => String(v).padStart(2, '0'), day = ms => { if (!ms) return '—'; const d = new Date(ms); return `${d.getMonth() + 1}/${d2(d.getDate())}`; };
+  const st = v => v == null ? '—' : v < 0 ? 'F' : fmtST(v);
+  a.forEach((e, i) => tr([`${i + 1}`, e.n, fmtRT(e.t), taRank(e.t), st(e.st), day(e.at)], false, mark && e.at === mark.at && e.t === mark.t));
+  if (!a.length) { const p = document.createElement('p'); p.textContent = 'まだ記録がありません。タイムアタックを走ると、ここに並びます。'; p.style.fontSize = '13px'; box.appendChild(p); return; }
+  box.appendChild(tab);
+}
+function taReload() { taBest = null; try { taBest = JSON.parse(localStorage.getItem(playerKey(TA.key)) || 'null'); } catch (e) {} }
+taReload();
+// 羽美のヒント: the first whose class this run reaches (fastest first)
+const UMI_HINT = [['記念クラス', '全開のまま…体をぐっと倒すの。'], ['A1', 'わたし、ターンでレバーを離さないよ〜。']];
+const taRank = t => TA_RANKS.find(r => t <= r[1])[0];
+const taGap = d => (d < 0 ? '−' : '+') + Math.abs(d).toFixed(2);
+
+function beginTA() {
+  ta.rankPlace = 0; ta.rankAt = null;
+  beginStart();
+  soloKind = 'ta'; waterEnv = null;
+  Object.assign(ta, { on: true, zero: SS.t0 + CLOCK, lastAt: SS.t0 + CLOCK, laps: [], st: null, path: [], nextPt: SS.t0, done: false, log: [], ev: [], corners: [], cur: null, cSide: -1 });
+  if (VR) VR.begin('ta');
+  toast(`タイムアタック（${VENUE.name}）`, `${playerName()}　大時計スタートから${TA.laps}周　${taBest ? '自己ベスト ' + fmtRT(taBest.t) : '走ったタイムで級を判定'}`, 'info');
+}
+// every physics step of the solo boat
+function taStep() {
+  if (!ta.on) return;
+  if (time >= ta.nextPt) {
+    ta.path.push(+B.x.toFixed(2), +B.y.toFixed(2), +B.a.toFixed(3)); ta.nextPt += TA.ghostDt;
+    ta.log.push(`${rpN(time - ta.zero, 2)} ${rpN(B.x)} ${rpN(B.y)} ${Math.round(((B.a * 180 / Math.PI) % 360 + 540) % 360 - 180)} ${rpN(B.v * 3.6)} ${rpN(input.thr, 2)} ${rpN(input.steer, 2)} ${rpN(input.roll, 2)} ${rpN(input.pitch, 2)} ${rpN(B.load, 2)} ${Math.round((B.yaw || 0) * 57.3)}${B.cap > 0 ? ' cap' : ''}`);
+  }
+  if (SS.phase !== 'count') taMarkGap();
+  if (B.cap > 0) taFail('転覆');
+}
+// マークとの間隔: for each corner, the closest the hull came to the turn mark — from the hull's edge (the capsule
+// HULL_AFT behind to HULL_FWD ahead of the centre, HULL_R wide) to the buoy's surface (r 1.5 m). 0 = touching.
+const TA_CORNER = { from: 30 };   // a corner is the water beyond MK − 30 m on that mark's side
+const TA_PART_JA = { bow: '艇首', mid: '中央', stern: '艇尾' };
+function taMarkGap() {
+  const side = B.x > MK - TA_CORNER.from ? 0 : B.x < -(MK - TA_CORNER.from) ? 1 : -1;
+  if (side !== ta.cSide) { if (ta.cur) taCornerEnd(); ta.cSide = side; ta.cur = side < 0 ? null : { m: side ? '2M' : '1M', gap: Infinity }; }
+  if (!ta.cur) return;
+  const ob = OBSTACLES.filter(o => o.kind === 'mark')[side], c = Math.cos(B.a), s = Math.sin(B.a);
+  const [px, py, qx, qy] = closestSegSeg(B.x - c * HULL_AFT, B.y - s * HULL_AFT, B.x + c * HULL_FWD, B.y + s * HULL_FWD, ob.x1, ob.y1, ob.x2, ob.y2);
+  const gap = Math.hypot(px - qx, py - qy) - HULL_R - ob.r;
+  if (gap < ta.cur.gap) {
+    const along = (px - B.x) * c + (py - B.y) * s;
+    Object.assign(ta.cur, { gap, t: time - ta.zero, v: B.v * 3.6, part: along > HULL_FWD - 0.3 ? 'bow' : along < -HULL_AFT + 0.3 ? 'stern' : 'mid' });
+  }
+}
+function taCornerEnd() {
+  const k = ta.cur; ta.cur = null;
+  if (!k || !isFinite(k.gap)) return;
+  k.lap = ta.laps.length + 1; ta.corners.push(k);
+  taEv(`${k.m} lap${k.lap} gap=${Math.max(0, k.gap).toFixed(2)}m t=${k.t.toFixed(2)} v=${Math.round(k.v)} part=${k.part}`);
+}
+const taGapJa = g => g <= 0.02 ? '接触' : `${g.toFixed(2)}m`;
+// per lap: "1周 1M 0.12m（中央）・2M 0.30m（艇首）"
+const taCornersJa = list => [1, 2, 3].map(l => { const cs = list.filter(k => k.lap === l); return cs.length ? `${l}周 ` + cs.map(k => `${k.m} ${taGapJa(k.gap)}（${TA_PART_JA[k.part]}）`).join('・') : ''; }).filter(Boolean).join('　');
+const taEv = msg => ta.ev.push(`${rpN(time - ta.zero, 2)} ${msg}`);
+function taStart(st) { if (!ta.on) return; ta.st = st; if (VR) VR.ev('st', 1, { st, flying: st < 0 }, ta.zero + st); taEv(`ST ${st < 0 ? 'F' + fmtST(-st) : fmtST(st)}`); if (st < 0) taFail('フライング'); }
+function taLap(at) {
+  if (!ta.on) return;
+  const lt = at - ta.lastAt, n = ta.laps.push(lt); ta.lastAt = at;
+  if (VR) VR.ev('lap', 1, { lap: n, lapTime: lt }, at);
+  taEv(`lap${n} ${lt.toFixed(2)}`);
+  const b = taBest && taBest.laps ? taBest.laps.slice(0, n).reduce((s, v) => s + v, 0) : null;
+  const sum = at - ta.zero;
+  if (n >= TA.laps) { taFinish(sum); return; }
+  toast(`${n}周`, `ラップ ${lt.toFixed(2)}${b != null ? `　自己ベスト比 ${taGap(sum - b)}` : ''}`, 'info');
+}
+function taFail(why) {
+  if (!ta.on) return;
+  taEv(`fail ${why}`); ta.on = false;
+  if (VR) { VR.ev('fail', 1, { why }); VR.finish('no_record', time, why); }
+  toast(why, '記録なし', 'bad');
+  setTimeout(() => taShow(null, why), TA.failWait * 1000);
+}
+function taFinish(t) {
+  if (ta.cur) taCornerEnd();
+  ta.on = false; ta.done = true;
+  if (VR) { VR.ev('finish', 1, { time: t, place: 1 }, ta.zero + t); VR.finish('finished', ta.zero + t); }
+  const prev = taBest, best = !prev || t < prev.t;
+  const mt = taMeasNow();
+  if (best) {
+    taBest = { t, laps: ta.laps.slice(), st: ta.st, meas: mt, rank: taRank(t), g: ta.path, g0: SS.t0 - ta.zero, at: Date.now() };
+  }
+  ta.lastRun = { t, laps: ta.laps.slice(), st: ta.st, rank: taRank(t), g: ta.path.slice(), g0: SS.t0 - ta.zero, at: Date.now() };
+  if (best) {
+    try { localStorage.setItem(playerKey(TA.key), JSON.stringify(taBest)); } catch (e) {}
+  }
+  taLogSave(t, best);
+  ta.rankPlace = taRankAdd(t, ta.st); ta.rankAt = taRankLoad().find(e => e.t === t && e.n === playerName()) || null;
+  toast(best ? '自己ベスト更新' : 'ゴール', `${fmtRT(t)}　${taRank(t)}`, best ? 'good' : 'info');
+  setTimeout(() => taShow({ t, laps: ta.laps.slice(), st: ta.st, meas: mt }, null, best ? prev : taBest, best), 1200);
+}
+// the result card. run = this run (null if it ended with no record), ref = the best to compare against
+function taShow(run, why, ref = taBest, isBest = false) {
+  if (soloKind !== 'ta' || fleet) return;
+  $('taTime').textContent = run ? fmtRT(run.t) : '記録なし';
+  const rk = run ? taRank(run.t) : '';
+  $('taRank').textContent = rk; $('taRank').hidden = !run;
+  $('taRank').className = 'ta-rank' + (TA_EXTRA.includes(rk) ? ' ex' : rk === '記念クラス' ? ' top' : '');
+  let msg;
+  if (!run) msg = why === 'フライング' ? 'フライング：針が0を指す前にスタートラインを越えました。' : why === '出遅れ' ? '出遅れ：針が0を指してから1秒以内に越えられませんでした。' : why === '転覆' ? '転覆：ターンで体重移動が足りないか、アクセルを開けすぎました。' : '内側航走：ターンマークの内側を通りました。';
+  else {
+    const i = TA_RANKS.findIndex(r => r[0] === rk), up = i > 0 ? TA_RANKS[i - 1] : null;
+    msg = (isBest ? (ref ? `自己ベスト更新！（${taGap(run.t - ref.t)}秒）` : '初めての記録です。') : `自己ベストまで ${(run.t - ref.t).toFixed(2)}秒。`)
+      + (up ? `　${up[0]}まであと${(run.t - up[1]).toFixed(1)}秒。` : '　最高ランクです。');
+  }
+  if (run && ta.rankPlace) msg += `　端末内ランキング ${ta.rankPlace}位！`;
+  if (run && taRival) { const d = run.t - taRival.t; msg += `　${taRival.name}のゴーストに${d <= 0 ? '勝ち' : '負け'}（${d <= 0 ? '' : '+'}${d.toFixed(2)}秒）`; }
+  $('taGhostOut').hidden = !(run || taBest);
+  $('taMsg').textContent = msg;
+  { let rb = $('taRankBox'); if (!rb) { rb = document.createElement('div'); rb.id = 'taRankBox'; const h = document.createElement('h2'); h.className = 'rk-h'; h.textContent = '端末内ランキング'; $('taNote').before(h); h.after(rb); }
+    taRankTable(rb, run && ta.rankPlace ? ta.rankAt : null); }
+  netResultUi(run, isBest);   // d223 全体ランキング
+  // d202 (まえ): 羽美 (the girl in the manual's manga) drops a hint about the full-speed turn once a run is fast enough
+  const hint = run && UMI_HINT.find(([rank]) => run.t <= TA_RANKS.find(r => r[0] === rank)[1]);
+  $('taHint').hidden = !hint; if (hint) $('taHintTxt').textContent = hint[1];
+  const tb = $('taBody'); tb.textContent = '';
+  const row = (name, a, b) => { const tr = document.createElement('tr'); [name, a, b].forEach(v => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); }); tb.appendChild(tr); };
+  const st = v => v == null ? '—' : v < 0 ? 'F ' + fmtST(-v) : fmtST(v);
+  const cur = run || { laps: ta.laps, st: ta.st };
+  for (let i = 0; i < TA.laps; i++) row(`${i + 1}周`, cur.laps[i] != null ? cur.laps[i].toFixed(2) : '—', ref && ref.laps[i] != null ? ref.laps[i].toFixed(2) : '—');
+  row('ST', st(cur.st), ref ? st(ref.st) : '—');
+  row('タイム', run ? fmtRT(run.t) : '—', ref ? fmtRT(ref.t) : '—');
+  taMeasTable(run ? run.meas : taMeasNow(), ref && ref.meas);
+  $('taGaps').textContent = ta.corners.length ? 'マークとの間隔（艇体の端〜ブイ）　' + taCornersJa(ta.corners) : '';
+  $('taNote').textContent = '級の目安（3周）：' + TA_RANKS.filter(r => !TA_EXTRA.includes(r[0])).slice(0, -1).map(r => `${r[0]} ${fmtRT(r[1])}`).join('／') + '／それより遅いとルーキー。エクストラ：' + TA_RANKS.filter(r => TA_EXTRA.includes(r[0])).reverse().map(r => `${r[0]} ${fmtRT(r[1])}`).join('／') + '。タイムは針が0を指してからゴールまで。' + taMeasNote();
+  $('taSlit').hidden = !(practiceSlit && practiceSlit.archived);
+  if ($('taVidMsg')) { $('taVidMsg').textContent = ''; $('taVidMsg').hidden = true; }
+  if (typeof vlUi === 'function') vlUi();
+  paused = true; $('taBox').hidden = false;
+}
+// 区間タイム (展示・直線・まわり足・一周): the same gates as the practice 展示航走 (input.js GATES), every lap
+const TA_MEAS_ALL = ['tenji', 'choku', 'mawari', 'isshu'];   // what is recorded (a section the venue doesn't measure stays empty)
+const taMeasShown = () => [...measKeys(), 'isshu'];             // d254: the venue's sections only
+const taMeasNote = () => '　区間：' + MEAS_NOTE + '（一周は2周目・3周目の欄）。緑はその区間の今回いちばん速い周。';
+const taMeasNow = () => { const o = {}; for (const k of TA_MEAS_ALL) o[k] = (meas.t[k] || []).map(v => v == null ? null : +v.toFixed(3)); return o; };
+// 一周 is measured back straight to back straight, so its n-th value ends in lap n+1
+const taMeasLaps = (m, k) => { const a = (m && m[k]) || []; return k === 'isshu' ? [null, ...a] : a; };
+const taMeasLog = m => taMeasShown().map(k => `${k}=` + Array.from({ length: TA.laps }, (_, i) => { const v = taMeasLaps(m, k)[i]; return v == null ? '-' : v.toFixed(2); }).join('/')).join(' ');
+function taMeasTable(m, ref) {
+  let tab = $('taMeas');
+  if (!tab) {
+    tab = document.createElement('table'); tab.id = 'taMeas'; tab.className = 'mtab';
+    $('taBody').closest('table').after(tab);
+  }
+  tab.textContent = '';
+  const tr = cells => { const r = document.createElement('tr'); cells.forEach(([v, cls, th]) => { const c = document.createElement(th ? 'th' : 'td'); c.textContent = v; if (cls) c.style.color = 'var(--good)'; r.appendChild(c); }); tab.appendChild(r); };
+  tr([['区間', '', 1], ...Array.from({ length: TA.laps }, (_, i) => [`${i + 1}周`, '', 1]), ['自己ベスト時', '', 1]]);
+  for (const k of taMeasShown()) {
+    const a = taMeasLaps(m, k), vals = a.filter(v => v != null), lo = vals.length > 1 ? Math.min(...vals) : null;
+    const r = taMeasLaps(ref, k).filter(v => v != null);
+    tr([[MEAS_JA[k].replace('タイム', '')], ...Array.from({ length: TA.laps }, (_, i) => [a[i] == null ? '—' : a[i].toFixed(2), a[i] != null && a[i] === lo ? 'good' : '']), [r.length ? Math.min(...r).toFixed(2) : '—']]);
+  }
+}
+// ログ: every finished run is kept (the last TA.logKeep, plus the current best which is never pushed out)
+function taLogSave(t, best) {
+  const pad = typeof currentPad === 'function' && currentPad();
+  const text = [`#HFGP-TA v1 ${GAME_VER} ${new Date().toISOString()}`,
+    `#result time=${t.toFixed(2)} rank=${taRank(t)} ST=${ta.st == null ? '-' : ta.st.toFixed(3)} laps=${ta.laps.map(v => v.toFixed(2)).join('/')}${best ? ' best' : ''}`,
+    `#meas ${taMeasLog(taMeasNow())}`,
+    `#player ${playerName()}`,
+    `#setup laps=${TA.laps} water=calm motor=solo(deashi${rpN(B.deashi, 3)}/mid${rpN(B.mMid, 3)}/mawari${rpN(B.mawari, 3)}/nobi${rpN(B.nobi, 3)}) tilt=${rpN(B.tilt, 1)} control=${controlMode}${pad ? '+controller' : ''}`,
+    '#S t x y heading(deg) v(km/h) thr steer roll pitch load yaw(deg/s)  (t = s from the start signal, every 0.1 s; x,y in m, start line x=0, 1M x=+' + MK + ', 2M x=-' + MK + ')',
+    ...ta.log, '#events (t, what; gap = hull edge to buoy surface at its closest in that corner, part = which part of the hull)', ...ta.ev].join('\n');
+  const key = playerKey(TA.logKey);
+  let all = []; try { all = JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) {}
+  if (best) for (const e of all) e.best = false;
+  all.unshift({ at: Date.now(), title: `タイムアタック ${fmtRT(t)} ${taRank(t)}${best ? '（自己ベスト）' : ''}`, text, best });
+  while (all.length > TA.logKeep) { const i = all.map(e => !!e.best).lastIndexOf(false); all.splice(i < 0 ? all.length - 1 : i, 1); }
+  for (;;) { try { localStorage.setItem(key, JSON.stringify(all)); break; } catch (e) { const i = all.map(e => !!e.best).lastIndexOf(false); if (all.length <= 1 || i <= 0) break; all.splice(i, 1); } }
+}
+function taLogOpen(back) {
+  rpSrc = { key: playerKey(TA.logKey), title: `タイムアタックのログ（${playerName()}）`, file: 'hfgp_ta', empty: 'タイムアタックのログはまだありません。3周走りきると自動で残ります。' };
+  rpBack = back; rpOpen(0);
+}
+$('taLog').addEventListener('click', () => { $('taBox').hidden = true; taLogOpen(() => { $('taBox').hidden = false; paused = true; }); });
+$('pmTALog').addEventListener('click', () => { $('pmenu').hidden = true; taLogOpen(() => { $('pmenu').hidden = false; paused = true; }); });
+const taClose = () => { $('taBox').hidden = true; if (VR) VR.discard(); paused = false; last = performance.now(); };   // 動画用ログ: closing the card drops it
+$('taAgain').addEventListener('click', () => { taClose(); beginTA(); });
+$('taClose').addEventListener('click', taClose);
+$('taSlit').addEventListener('click', () => slitOpen(practiceSlit));
+$('pmRank').addEventListener('click', () => { netShowTab('local'); $('pmenu').hidden = true; $('rankBox').hidden = false; });
+$('rankClose').addEventListener('click', () => { $('rankBox').hidden = true; $('pmenu').hidden = false; });
+$('pmTA').addEventListener('click', () => { closeMenu(); if (fleet) quitFleet(); beginTA(); });
+
+// ゴースト: the best run, drawn faint, on the same clock
+const GHOST_STYLE = { hull: '#9fe8d4', num: '#0a2c38', label: 'G', helmet: '#9fe8d4' };
+const GHOST_IN = { thr: 0, steer: 0, roll: 0, pitch: 0 };
+function taDrawGhost() {
+  if (soloKind !== 'ta' || fleet || !(ta.on || ta.done)) return;
+  if (taRival) taDrawOne(taRival, RIVAL_STYLE, 0.45);
+  if (taBest && taBest.g) taDrawOne(taBest, GHOST_STYLE, 0.38);
+}
+// d268: the ghost's pose now, shared by the 2D drawing and the 3D view (play3d.js)
+function taGhostPose(src) {
+  const g = src && src.g; if (!g) return null;
+  const n = g.length / 3, u = (time - ta.zero - src.g0) / TA.ghostDt;
+  if (u < 0 || u >= n - 1) return null;
+  const i = Math.floor(u), f = u - i, j = i * 3;
+  let da = g[j + 5] - g[j + 2]; da = Math.atan2(Math.sin(da), Math.cos(da));
+  const gb = { x: g[j] + (g[j + 3] - g[j]) * f, y: g[j + 1] + (g[j + 4] - g[j + 1]) * f, a: g[j + 2] + da * f,
+    v: Math.hypot(g[j + 3] - g[j], g[j + 4] - g[j + 1]) / TA.ghostDt, vl: 0, yaw: 0, porp: 0, cap: 0, load: 0 };
+  // d170 (まえ: the ghost didn't slide): only x, y, heading are stored, so the slip comes from the path — the way it travels
+  // against the way it points, as physics.js b.slip — and drawBoatAt swings the stern out the same as a live boat
+  const dx = g[j + 3] - g[j], dy = g[j + 4] - g[j + 1], fx = Math.cos(gb.a), fy = Math.sin(gb.a);
+  gb.slip = Math.atan2(-fy * dx + fx * dy, Math.max(0.05, fx * dx + fy * dy));
+  return gb;
+}
+function taGhostsNow() {   // [{b, kind: 'rival' | 'best'}] while a タイムアタック shows them
+  if (soloKind !== 'ta' || fleet || !(ta.on || ta.done)) return [];
+  const out = [], r = taRival && taGhostPose(taRival), m = taBest && taBest.g && taGhostPose(taBest);
+  if (r) out.push({ b: r, kind: 'rival' }); if (m) out.push({ b: m, kind: 'best' });
+  return out;
+}
+function taDrawOne(src, sty, alpha) {
+  const gb = taGhostPose(src); if (!gb) return;
+  ctx.save(); ctx.globalAlpha = alpha; drawBoatAt(gb, GHOST_IN, sty, false); ctx.restore();
+}
+
+// d219 ゴーストの書き出し・読み込み (まえ): a run's ghost as a small file (0.1 s x, y, heading — about 20 KB for 3 laps) that
+// friends can swap; a loaded ghost (相手) runs beside your own best in every タイムアタック until it is taken off.
+// The same file is what the 全体ランキング / 鍵付き登録 will send later. Only ghosts made on the same TA rules (TA.key) load.
+const TA_GHOST = { format: 'hfgp-ghost', version: 1, rivalKey: 'honorGP.taRival', maxPts: 4000 };
+const RIVAL_STYLE = { hull: '#ffb3d9', num: '#3a0a24', label: 'R', helmet: '#ffb3d9' };
+let taRival = null;
+const taRivalLoad = () => { try { taRival = taGhostCheck(JSON.parse(localStorage.getItem(TA_GHOST.rivalKey) || 'null')); } catch (e) { taRival = null; } };
+taRivalLoad();
+// d236: another venue = another table — its own bests, device ranking and rival ghost (a ghost from the other venue doesn't load)
+venueHooks.push(() => { TA.key = TA.keyBase + VENUE.taSuffix; taReload(); taRivalLoad(); });
+function taGhostFile(src) {
+  return { format: TA_GHOST.format, version: TA_GHOST.version, game: GAME_VER, rules: TA.key, laps: TA.laps, dt: TA.ghostDt,
+    name: playerName(), t: src.t, lapTimes: src.laps, st: src.st, rank: src.rank || taRank(src.t), at: src.at || Date.now(), g0: src.g0, g: src.g };
+}
+// a file from someone else: check everything before it is drawn (returns the ghost, or throws with a message for the player)
+function taGhostCheck(o) {
+  if (o == null) return null;
+  if (!o || o.format !== TA_GHOST.format) throw new Error('ゴーストのファイルではありません');
+  if (o.version !== TA_GHOST.version) throw new Error('このゲームでは読めない版のゴーストです');
+  if (o.rules !== TA.key) throw new Error(`タイムアタックの決まりが違う版のゴーストです（${o.game || '?'}）`);
+  const g = o.g;
+  if (!Array.isArray(g) || g.length < 30 || g.length % 3 || g.length > TA_GHOST.maxPts * 3 || !g.every(Number.isFinite)) throw new Error('ゴーストの中身が壊れています');
+  if (!(o.t > 60 && o.t < 400) || !Number.isFinite(o.g0) || o.dt !== TA.ghostDt) throw new Error('ゴーストの中身が壊れています');
+  const name = String(o.name || '名無し').replace(/[<>&"'\s@]+/g, '').slice(0, PLAYER.nameMax) || '名無し';
+  return { name, t: o.t, laps: Array.isArray(o.lapTimes) ? o.lapTimes.map(Number) : [], st: Number.isFinite(o.st) ? o.st : null, rank: taRank(o.t), at: +o.at || 0, g0: o.g0, g, game: o.game };
+}
+function taGhostExport(src) {
+  if (!src || !src.g) return;
+  const f = taGhostFile(src), blob = new Blob([JSON.stringify(f)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  const tt = fmtRT(src.t).replace(/[^0-9]/g, '');
+  a.href = url; const d = new Date(), p2 = v => String(v).padStart(2, '0');
+  a.download = `hfgp_ghost_${tt}_${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}.json`;
+  a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();   // (the name is inside the file; a Japanese file name can come out as 「download」)
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  toast('ゴースト', `${fmtRT(src.t)} のゴーストを書き出しました`, 'good');
+}
+function taRivalUi() {
+  const s = $('rivalTxt'); if (!s) return;
+  s.textContent = taRival ? `相手：${taRival.name} ${fmtRT(taRival.t)}（${taRival.rank}）` : '相手：なし';
+  $('rivalOff').hidden = !taRival;
+}
+function taRivalSet(g) {
+  taRival = g; try { if (g) localStorage.setItem(TA_GHOST.rivalKey, JSON.stringify({ format: TA_GHOST.format, version: TA_GHOST.version, rules: TA.key, game: g.game, dt: TA.ghostDt, name: g.name, t: g.t, lapTimes: g.laps, st: g.st, at: g.at, g0: g.g0, g: g.g })); else localStorage.removeItem(TA_GHOST.rivalKey); } catch (e) {}
+  taRivalUi();
+}
+$('taGhostOut').addEventListener('click', () => taGhostExport(ta.lastRun && ta.done ? ta.lastRun : taBest));
+$('rivalLoad').addEventListener('click', () => $('rivalFile').click());
+$('rivalFile').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    if (f.size > 400000) throw new Error('ファイルが大きすぎます');
+    const g = taGhostCheck(JSON.parse(await f.text()));
+    taRivalSet(g); toast('ゴースト', `${g.name} ${fmtRT(g.t)} のゴーストと走ります`, 'good');
+  } catch (err) { toast('ゴースト', `読み込めませんでした：${err.message || err}`, 'bad'); }
+});
+$('rivalOff').addEventListener('click', () => { taRivalSet(null); toast('ゴースト', '相手のゴーストを外しました', 'info'); });
+taRivalUi();
