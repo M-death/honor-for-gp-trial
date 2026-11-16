@@ -2,7 +2,7 @@
    First start: every file of the game is saved on the device; after that the game starts from there, with or without the
    network (no more 3D 組み立て waiting on a slow Wi-Fi). A new trial version (TRIAL.ver) is fetched quietly in the
    background and used from the next start; the old copy is then deleted. The ranking server is never cached. */
-const VER = 't136', CACHE = 'hfgp-trial-' + VER;
+const VER = 't143', CACHE = 'hfgp-trial-' + VER;
 const FILES = [
  "./",
  "index.html",
@@ -14,9 +14,6 @@ const FILES = [
  "js/boat3dx.js",
  "js/core.js",
  "js/data.js",
- "js/hfgp3d-glb-pc.js",
- "js/hfgp3d-glb-venue.js",
- "js/hfgp3d-glb.js",
  "js/input.js",
  "js/lab.js",
  "js/main.js",
@@ -60,8 +57,16 @@ const FILES = [
  "title/chars.webp",
  "title/logo.webp"
 ];
+// t138 (まえ: インストールが終わらないと3Dにならない): the first start saved every file at once — 5.4 MB of PC and venue models
+// raced the page's own 3D download on a slow line. Now the install saves only the game itself; the 3D models are saved as the
+// page loads them (fetch below), and the rest (LATER) only when the page says the 3D view is up (message 'warm').
+const LATER = ["js/hfgp3d-glb-venue.js", "js/hfgp3d-glb.js"];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
+});
+self.addEventListener('message', e => {
+  if (!e.data || e.data.warm !== true) return;
+  e.waitUntil(caches.open(CACHE).then(async c => { for (const f of LATER) { try { if (!(await c.match(f, { ignoreSearch: true }))) { const r = await fetch(f); if (r.ok) await c.put(f, r); } } catch (x) {} } }));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('hfgp-trial-') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));

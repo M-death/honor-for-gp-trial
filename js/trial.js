@@ -2,7 +2,7 @@
    The trial is the main game's files plus this one. d198 (まえ): the public trial has two modes only — タイムアタック and
    6艇レース — and a short settings screen. To update the trial, copy the main game's js/ and index.html over and keep this
    file and its <script> line (and the 体験版 title). */
-const TRIAL = { ver: 't136', base: 'd340' };
+const TRIAL = { ver: 't143', base: 'd343' };
 if ($('verTag')) $('verTag').textContent = `${TRIAL.ver}（${GAME_VER}）`;
 const trialHide = el => { if (!el) return; el.hidden = true; el.style.display = 'none'; };
 // modes and tools that aren't in the trial
@@ -24,8 +24,9 @@ for (const id of ['labLaunch', 'labLaunchStart', 'goDemo', 'entryBtn', 'sgBtn', 
   det.dataset.tab = 'op'; $('zero').after(det);
   for (const el of [$('wheelSettings'), lab('invR'), lab('invP')]) if (el) box.appendChild(el);
 }
-// the top bar's 6艇デモ button is only 「やめる」 during a race in the trial
-{ const _r = refreshFleetUi; refreshFleetUi = () => { _r(); $('demoBtn').hidden = !fleet; }; $('demoBtn').hidden = !fleet; }
+// t143 (まえ: 6艇レース中の「練習をやめる」は消す、体験版はタイムアタックと6艇レースだけ): the top bar's 6艇デモ button
+// (練習をやめる → 大時計前からの練習) is never shown in the trial
+{ const _r = refreshFleetUi; refreshFleetUi = () => { _r(); trialHide($('demoBtn')); }; trialHide($('demoBtn')); }
 // 設定 opens on 操作 (the 開発 tab is gone)
 if (MENU.showTab && $('settings').querySelector('.set').dataset.cur === 'dev') MENU.showTab('op');
 // t129 (まえ 2026-11-16: スマホにダウンロード型): the trial installs as an app (manifest.webmanifest + sw.js, made by
@@ -82,13 +83,20 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   $('tSet').addEventListener('click', () => { fromTitle = true; close(); $('pmSet').click(); });
   if ($('close')) $('close').addEventListener('click', () => { if (fromTitle) { fromTitle = false; open(); } });
   // インストール: Android Chrome etc. hand us the install prompt; iPhone/iPad and the rest get the steps
-  const standalone = () => { try { return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; } catch (e) { return false; } };
+  // t140 (まえ: インストールしてもメニューが消えない): the manifest asks for display fullscreen, so the app runs in
+  // display-mode fullscreen, not standalone. In the browser tab, an install this browser made is remembered
+  // (appinstalled) and the button stays hidden until the browser offers the install again (= app removed).
+  const IK = 'honorGP.trialInstalled';
+  const lsGet = () => { try { return localStorage.getItem(IK) === '1'; } catch (e) { return false; } };
+  const lsSet = v => { try { v ? localStorage.setItem(IK, '1') : localStorage.removeItem(IK); } catch (e) {} };
+  const standalone = () => { try { return ['standalone', 'minimal-ui'].concat(document.fullscreenElement ? [] : ['fullscreen']).some(m => matchMedia('(display-mode: ' + m + ')').matches) || navigator.standalone === true; } catch (e) { return false; } };
   const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   let deferred = null;
   const instBtn = $('tInst');
-  const instShow = () => { instBtn.hidden = standalone() || window.top !== window || !(location.protocol === 'https:' || location.hostname === 'localhost'); };
-  addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; instShow(); });
-  addEventListener('appinstalled', () => { deferred = null; instShow(); });
+  const instShow = () => { instBtn.hidden = standalone() || (lsGet() && !deferred) || window.top !== window || !(location.protocol === 'https:' || location.hostname === 'localhost'); };
+  addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; lsSet(false); instShow(); });
+  addEventListener('appinstalled', () => { deferred = null; lsSet(true); instShow(); });
+  if (standalone()) lsSet(true);
   instShow();
   const say = html => { help.innerHTML = html + '<div><button class="btn" id="tHelpOk">OK</button></div>'; help.hidden = false; menu.hidden = true; $('tHelpOk').addEventListener('click', () => { help.hidden = true; menu.hidden = false; }); $('tHelpOk').focus(); };
   instBtn.addEventListener('click', async () => {
@@ -99,3 +107,15 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   // pad: A starts (the title's buttons take the focus; menu.js handles Enter/A on a focused button)
   setTimeout(() => { if (!T.hidden) $('tGo').focus(); }, 50);
 })();
+
+// t138 (まえ: インストールが終わらないと3Dにならない): the offline save no longer takes the 3D models at the first start (sw.js);
+// once the 3D view is up — or after 60 s if it never is — the page asks the service worker to save the rest quietly.
+if ('serviceWorker' in navigator && window.top === window) {
+  const warmT0 = Date.now();
+  const warm = () => {
+    const sw = navigator.serviceWorker.controller;
+    if (sw && ((window.View3D && window.View3D.ready) || Date.now() - warmT0 > 60000)) { sw.postMessage({ warm: true }); return; }
+    setTimeout(warm, 3000);
+  };
+  addEventListener('load', () => setTimeout(warm, 3000));
+}
