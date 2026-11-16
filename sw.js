@@ -2,7 +2,7 @@
    First start: every file of the game is saved on the device; after that the game starts from there, with or without the
    network (no more 3D 組み立て waiting on a slow Wi-Fi). A new trial version (TRIAL.ver) is fetched quietly in the
    background and used from the next start; the old copy is then deleted. The ranking server is never cached. */
-const VER = 't129', CACHE = 'hfgp-trial-' + VER;
+const VER = 't136', CACHE = 'hfgp-trial-' + VER;
 const FILES = [
  "./",
  "index.html",
@@ -56,7 +56,9 @@ const FILES = [
  "manga/p4.webp",
  "manga/p5.webp",
  "manga/p6.webp",
- "manga/umi_face.webp"
+ "manga/umi_face.webp",
+ "title/chars.webp",
+ "title/logo.webp"
 ];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
