@@ -2,7 +2,7 @@
    The trial is the main game's files plus this one. d198 (まえ): the public trial has two modes only — タイムアタック and
    6艇レース — and a short settings screen. To update the trial, copy the main game's js/ and index.html over and keep this
    file and its <script> line (and the 体験版 title). */
-const TRIAL = { ver: 't167', base: 'd365' };
+const TRIAL = { ver: 't168', base: 'd366' };
 if ($('verTag')) $('verTag').textContent = `${TRIAL.ver}（${GAME_VER}）`;
 const trialHide = el => { if (!el) return; el.hidden = true; el.style.display = 'none'; };
 // modes and tools that aren't in the trial
@@ -116,6 +116,9 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   });
   // pad: A starts (the title's buttons take the focus; menu.js handles Enter/A on a focused button)
   setTimeout(() => { if (!T.hidden) $('tGo').focus(); }, 50);
+  // BGM (t168): an installed app may start sound at once (the title music plays from the start); in a browser tab
+  // the sound starts with the first tap (input.js resumes it)
+  try { initAudio(); } catch (e) {}
 })();
 
 // t138 (まえ: インストールが終わらないと3Dにならない): the offline save no longer takes the 3D models at the first start (sw.js);

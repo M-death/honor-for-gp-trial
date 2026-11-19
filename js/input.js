@@ -361,7 +361,7 @@ function bgmConfig() {
   try { fetch('bgm/bgm.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(j => {
     if (!j || !j.tracks) return;
     const tr = {};
-    for (const k of ['menu', 'race', 'race2', 'ta', 'goal']) { const t = j.tracks[k]; if (t && t.file) tr[k] = { file: 'bgm/' + t.file, loop: Array.isArray(t.loop) && t.loop[1] > t.loop[0] ? t.loop : null, startAt: +t.startAt || 0, from: +t.from || 0, once: k === 'goal' }; }
+    for (const k of ['title', 'menu', 'race', 'race2', 'ta', 'tut', 'goal']) { const t = j.tracks[k]; if (t && t.file) tr[k] = { file: 'bgm/' + t.file, loop: Array.isArray(t.loop) && t.loop[1] > t.loop[0] ? t.loop : null, startAt: +t.startAt || 0, from: +t.from || 0, once: k === 'goal' }; }
     BGM.tr = tr; BGM.enabled = !!j.enabled; show(BGM.enabled);
   }).catch(() => {}); } catch (e) {}
 }
@@ -371,7 +371,7 @@ function bgmLoad(key) {
   if (!snd.ctx || !BGM.tr[key] || bgm.buf[key] || bgm.loading[key]) return;
   bgm.loading[key] = fetch(BGM.tr[key].file).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
     .then(ab => new Promise((ok, ng) => { const p = snd.ctx.decodeAudioData(ab, ok, ng); if (p && p.then) p.then(ok, ng); }))
-    .then(b => { bgm.buf[key] = b; }).catch(() => {}).finally(() => { bgm.loading[key] = null; });
+    .then(b => { const L = BGM.tr[key] && BGM.tr[key].loop; if (L && L[1] > b.duration) L[1] = b.duration; bgm.buf[key] = b; })   // loop [0, 9999] = the whole file.catch(() => {}).finally(() => { bgm.loading[key] = null; });
 }
 function bgmPos(c) {   // where the playing track is now (seconds into the file)
   let p = c.off + (snd.ctx.currentTime - c.t0) * (c.rate || 1);
@@ -401,19 +401,26 @@ function bgmStart(key, pos, fade) {
   bgmStop(bgm.cur, fade); bgm.cur = cur;
   return true;
 }
-const BGM_MENU = ['start', 'pmenu', 'setsu', 'setsuNewBox', 'waku', 'manualBox', 'raceSetup'];
+const BGM_MENU = ['start', 'pmenu', 'setsu', 'setsuNewBox', 'waku', 'manualBox', 'raceSetup', 'settings'];
 const bgmShown = id => $(id) && !$(id).hidden;
 // what should be playing now: { key, pos (synced tracks only) } or null
 function bgmWant() {
   if (!BGM.enabled || !bgm.on || !snd.on || !snd.ctx || document.hidden) return null;
+  // d366 (体験版 BGM, まえ): title screen, then 羽美's tutorial + 足合わせ (incl. her show lap) have their own tracks
+  if (BGM.tr.title && bgmShown('titleScr')) return { key: 'title' };
+  if (BGM.tr.tut && ((typeof TUT !== 'undefined' && TUT.on) || (typeof ASHI !== 'undefined' && ASHI.on))) return { key: 'tut' };
   const pr = typeof playerRow === 'function' && fleet ? playerRow() : null;
   // the fanfare: latched once per race / per タイムアタック run
   if (fleet && pr && !lab.active) {
     const done = fleet.order && fleet.order.length && fleet.order.length >= fleet.boats.filter(r => !r.out && !r.flying).length;
     if (bgm.goalKey !== fleet && (pr.fin != null || ((pr.out || pr.flying) && done))) { bgm.goalKey = fleet; bgm.goal = 'start'; }
-  } else if (soloKind === 'ta' && ta.done && bgm.goalKey !== ta.zero) { bgm.goalKey = ta.zero; bgm.goal = 'start'; }
+  } else if (BGM.tr.goal && soloKind === 'ta' && ta.done && bgm.goalKey !== ta.zero) { bgm.goalKey = ta.zero; bgm.goal = 'start'; }
+  // no fanfare track (まえ: ゴールの時は無し): the race music fades out at the goal, the menu music comes back with the results
+  if ((bgm.goal === 'start' || bgm.goal === 'play') && !BGM.tr.goal) bgm.goal = 'quiet';
+  if (bgm.goal === 'quiet' && bgm.goalKey === fleet && !BGM_MENU.some(bgmShown) && !bgmShown('resBox')) return null;
   if (bgm.goal === 'start' || bgm.goal === 'play') return { key: 'goal' };
-  const afterGoal = bgm.goal === 'done' && (bgm.goalKey === fleet || bgm.goalKey === ta.zero);
+  if (!BGM.tr.goal && soloKind === 'ta' && !fleet && bgmShown('taBox')) return { key: 'ta' };   // TA music plays on through the finish card and retries
+  const afterGoal = (bgm.goal === 'done' || bgm.goal === 'quiet') && (bgm.goalKey === fleet || bgm.goalKey === ta.zero);
   if (afterGoal || BGM_MENU.some(bgmShown) || bgmShown('resBox') || bgmShown('taBox')) {
     if (bgmShown('raceSetup')) bgmLoad(raceCfg.start === 'pit' ? 'race' : 'race2');   // decode the race track while the player picks
     return { key: 'menu' };
@@ -441,7 +448,7 @@ function updateBgm() {
   for (const k in bgm.buf) {
     if (!bgm.buf[k] || BGM.keep.includes(k)) continue;
     const need = (w && (w.key === k || w.key === 'wait:' + k)) || (cur && cur.key === k) || (bgmShown('raceSetup') && k === (raceCfg.start === 'pit' ? 'race' : 'race2'))
-      || (fleet && playerRow() && !bgm.goal && k === (fleet.autoIdle ? 'race2' : 'race')) || (!fleet && k === 'ta' && (soloKind === 'ta' || soloKind === 'tenji'));   // kept through a pause
+      || (fleet && playerRow() && !bgm.goal && k === (fleet.autoIdle ? 'race2' : 'race')) || (!fleet && k === 'ta' && (soloKind === 'ta' || soloKind === 'tenji')) || (k === 'tut' && ((typeof TUT !== 'undefined' && TUT.on) || (typeof ASHI !== 'undefined' && ASHI.on)));   // kept through a pause
     if (!need) bgm.buf[k] = null;
   }
   if (!w || w.key.startsWith('wait:')) { if (w) bgmLoad(w.key.slice(5)); if (cur) { bgmStop(cur, BGM.fade * 0.5); bgm.cur = null; } return; }
@@ -461,7 +468,7 @@ function updateBgm() {
   else if (Math.abs(bgmPos(cur) - (BGM.tr[w.key].loop && w.pos >= BGM.tr[w.key].loop[1] ? BGM.tr[w.key].loop[0] + (w.pos - BGM.tr[w.key].loop[0]) % (BGM.tr[w.key].loop[1] - BGM.tr[w.key].loop[0]) : w.pos)) > thr) bgmStart(w.key, w.pos, 0.08);
 }
 // browsers only allow sound after the viewer interacts: wake it up on any tap, click or key
-for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { if (snd.ctx && snd.ctx.state === 'suspended') snd.ctx.resume().catch(() => {}); }, true);
+for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { if (!snd.ctx && BGM.enabled) initAudio(); if (snd.ctx && snd.ctx.state === 'suspended') snd.ctx.resume().catch(() => {}); }, true);
 
 // Stop the phone's auto-rotate from flipping the screen mid-race: go full screen and lock the
 // orientation the phone is in now (Android Chrome etc.; iPhone browsers don't allow either, so it's skipped).
