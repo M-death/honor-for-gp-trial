@@ -2,7 +2,7 @@
    The trial is the main game's files plus this one. d198 (まえ): the public trial has two modes only — タイムアタック and
    6艇レース — and a short settings screen. To update the trial, copy the main game's js/ and index.html over and keep this
    file and its <script> line (and the 体験版 title). */
-const TRIAL = { ver: 't154', base: 'd353' };
+const TRIAL = { ver: 't167', base: 'd365' };
 if ($('verTag')) $('verTag').textContent = `${TRIAL.ver}（${GAME_VER}）`;
 const trialHide = el => { if (!el) return; el.hidden = true; el.style.display = 'none'; };
 // modes and tools that aren't in the trial
@@ -23,6 +23,16 @@ for (const id of ['labLaunch', 'labLaunchStart', 'goDemo', 'entryBtn', 'sgBtn', 
   const box = document.createElement('div'); box.className = 'set'; box.style.marginTop = '6px'; det.appendChild(box);
   det.dataset.tab = 'op'; $('zero').after(det);
   for (const el of [$('wheelSettings'), lab('invR'), lab('invP')]) if (el) box.appendChild(el);
+}
+// t164 (まえ 2026-11-19: 体験版は極力説明文を減らそう、設定も開発関係は消す): the help lines go, the labels stay
+{
+  const lab = id => $(id) && $(id).closest('label');
+  for (const id of ['pmKeys', 'controlHelp', 'perfRow', 'gfx3dNow', 'rankNote', 'taNote']) trialHide($(id));
+  for (const sm of document.querySelectorAll('#pmenu .menu-main .btn small')) trialHide(sm);
+  for (const p of document.querySelectorAll('#settings p')) trialHide(p);   // every explanation under a setting
+  for (const id of ['dpr2d', 'perfOn', 'perf1M']) trialHide(lab(id));
+  const sa = lab('stAssistOn'); if (sa) for (const n of sa.childNodes) if (n.nodeType === 3 && /スタートアシスト/.test(n.textContent)) n.textContent = ' スタートアシスト';
+  for (const p of document.querySelectorAll('p')) if (p.textContent.trim() === '相手（選ばない枠はおまかせ）') p.textContent = '相手';
 }
 // t143 (まえ: 6艇レース中の「練習をやめる」は消す、体験版はタイムアタックと6艇レースだけ): the top bar's 6艇デモ button
 // (練習をやめる → 大時計前からの練習) is never shown in the trial

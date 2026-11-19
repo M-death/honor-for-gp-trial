@@ -2,13 +2,14 @@
    First start: every file of the game is saved on the device; after that the game starts from there, with or without the
    network (no more 3D 組み立て waiting on a slow Wi-Fi). A new trial version (TRIAL.ver) is fetched quietly in the
    background and used from the next start; the old copy is then deleted. The ranking server is never cached. */
-const VER = 't154', CACHE = 'hfgp-trial-' + VER;
+const VER = 't167', CACHE = 'hfgp-trial-' + VER;
 const FILES = [
  "./",
  "index.html",
  "manual.html",
  "manifest.webmanifest",
  "bgm/bgm.json",
+ "js/ashi.js",
  "js/boat-model-data.js",
  "js/boat3d.js",
  "js/boat3dx.js",
@@ -29,6 +30,7 @@ const FILES = [
  "js/setsu.js",
  "js/ta.js",
  "js/trial.js",
+ "js/tutorial.js",
  "js/venue3d.js",
  "js/view.js",
  "js/vlog.js",
