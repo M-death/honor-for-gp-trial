@@ -2,7 +2,7 @@
    First start: every file of the game is saved on the device; after that the game starts from there, with or without the
    network (no more 3D 組み立て waiting on a slow Wi-Fi). A new trial version (TRIAL.ver) is fetched quietly in the
    background and used from the next start; the old copy is then deleted. The ranking server is never cached. */
-const VER = 't170', CACHE = 'hfgp-trial-' + VER;
+const VER = 't171', CACHE = 'hfgp-trial-' + VER;
 const FILES = [
  "./",
  "index.html",
