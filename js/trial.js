@@ -2,7 +2,7 @@
    The trial is the main game's files plus this one. d198 (まえ): the public trial has two modes only — タイムアタック and
    6艇レース — and a short settings screen. To update the trial, copy the main game's js/ and index.html over and keep this
    file and its <script> line (and the 体験版 title). */
-const TRIAL = { ver: 't171', base: 'd370' };
+const TRIAL = { ver: 't178', base: 'd375' };
 if ($('verTag')) $('verTag').textContent = `${TRIAL.ver}（${GAME_VER}）`;
 const trialHide = el => { if (!el) return; el.hidden = true; el.style.display = 'none'; };
 // modes and tools that aren't in the trial
@@ -37,6 +37,14 @@ for (const id of ['labLaunch', 'labLaunchStart', 'goDemo', 'entryBtn', 'sgBtn', 
 // t143 (まえ: 6艇レース中の「練習をやめる」は消す、体験版はタイムアタックと6艇レースだけ): the top bar's 6艇デモ button
 // (練習をやめる → 大時計前からの練習) is never shown in the trial
 { const _r = refreshFleetUi; refreshFleetUi = () => { _r(); trialHide($('demoBtn')); }; trialHide($('demoBtn')); }
+// t173 (まえ: 本編の開発メニューで荒天を選ぶと体験版も荒れたまま？): the main game and the trial share the site's storage
+// (same GitHub Pages origin), so a setting saved in the main game's 開発 tab would carry over with no way to change it here.
+// The trial always runs those at their defaults — nothing is written, the main game keeps its own choice.
+try { wxMode = 'auto'; if ($('wxMode')) $('wxMode').value = 'auto'; } catch (e) {}
+try { FPS.on = true; fpsShow(); } catch (e) {}   // t174 (まえ: 公開版はテストも兼ねてるからfps表示): fps always shown
+try { PERF.on = false; PERF.only1M = false; } catch (e) {}
+try { if (DPR2D !== 2) { DPR2D = 2; resize(); } } catch (e) {}
+try { vlOn = true; } catch (e) {}
 // 設定 opens on 操作 (the 開発 tab is gone)
 if (MENU.showTab && $('settings').querySelector('.set').dataset.cur === 'dev') MENU.showTab('op');
 // t129 (まえ 2026-11-16: スマホにダウンロード型): the trial installs as an app (manifest.webmanifest + sw.js, made by
