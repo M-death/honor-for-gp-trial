@@ -13,7 +13,8 @@
 // running the same line each lap) → a new key; d265 records stay viewable by version.
 // d350 (まえ: タイムアタックの記録を全てリセット、ゴーストが邪魔になる — 伸び 1.012 にした d349 から): a new key; d339 records stay viewable by version.
 // d388 (まえ: 公開時は全ての記録を消して、先行してる人のは気にしなくていい): the public release starts on a new key (both courses, all inputs).
-const TA = { laps: 3, keyBase: 'honorGP.ta.d388', key: 'honorGP.ta.d388' + VENUE.taSuffix, ghostDt: 0.1, failWait: 1.8, logKey: 'hfgp-ta-logs', logKeep: 10 };
+// d389 (まえ: まちがってランキングにのせちゃった → 公開版を更新して消す): d388 → d389, a fresh table once more.
+const TA = { laps: 3, keyBase: 'honorGP.ta.d389', key: 'honorGP.ta.d389' + VENUE.taSuffix, ghostDt: 0.1, failWait: 1.8, logKey: 'hfgp-ta-logs', logKeep: 10 };
 // 級: the slowest time (s) that still earns it. CPU 1艇 on calm water, average motor (d130, median):
 // A1★ 1'47"7  A1 1'48"6  A2 1'49"6  B1 1'53"9  B2 1'59"6. d132: まえ set the bands — 記念クラス is beyond the CPU's best.
 // d136: エクストラ (まえ) — GP覇者 and レジェンド sit above 記念クラス

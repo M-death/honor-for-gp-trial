@@ -2,7 +2,7 @@
    The trial is the main game's files plus this one. d198 (まえ): the public trial has two modes only — タイムアタック and
    6艇レース — and a short settings screen. To update the trial, copy the main game's js/ and index.html over and keep this
    file and its <script> line (and the 体験版 title). */
-const TRIAL = { ver: 't193', base: 'd388' };
+const TRIAL = { ver: 't194', base: 'd389' };
 // d384 (まえ: 体験版はその時の本編に合わせて版ごとに塗装を固定、選択なし): なにわ = キャラ模様（体験版の期間だけ。なにわの既定ではない）
 if (typeof LIVERY !== 'undefined') LIVERY.fix = { suminoe: 'naniwa_cat', standard: 'practice' };
 { const r = document.getElementById('liveryRow'); if (r) r.remove(); }
