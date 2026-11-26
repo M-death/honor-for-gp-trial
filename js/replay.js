@@ -1,4 +1,4 @@
-/* ---------- ゲーム内リプレイ (d228, まえ: 動画用ログをゲームの中で再生して走りをチェックしたい) ----------
+/*⁠​‌​​‌​​​​‌‌​‌‌‌‌​‌‌​‌‌‌​​‌‌​‌‌‌‌​‌‌‌​​‌​​​‌​​​​​​‌‌​​‌‌​​‌‌​‌‌‌‌​‌‌‌​​‌​​​‌​​​​​​‌​​​‌‌‌​‌​‌​​​​​​‌​​​​​‌‌‌​​‌‌​‌​‌‌​​‌‌‌​‌​​​‌​‌‌‌​​​‌‌‌​​​​​​‌‌​‌​‌‌‌​‌‌‌​​‌​‌‌​​‌​​​​‌​​‌​​​‌‌‌‌​​​‌‌‌​​​​​​‌‌​​‌​​‌‌‌‌‌​​​‌‌‌​​​​​​‌‌​​​​‌‌​‌‌‌​​​‌‌‌​​​​​​‌‌​‌​‌​‌‌​​‌​​​​​​​‌​‌‌‌‌​​‌​​​​​​​‌​‌​​​​‌‌​​​‌‌​​‌​‌​​‌​​‌​​​​​​​‌‌​​‌​​​‌‌​​​​​​‌‌​​‌​​​‌‌​‌‌​​​‌​​​​​‌‌‌​​​‌‌‌​​​​​‌​‌​‌​‌​​​‌‌‌​​​‌‌‌​​​​​‌‌‌​‌​​​​​‌‌‌​​​‌‌‌​​​​​‌‌‌​​​​‌‌‌‌‌‌​​​‌‌‌​​​​​‌​‌​‌‌‌​​‌​​‌​​​​​​​‌​‌​​​​‌​​‌‌​‌​​‌​‌‌​‌​‌​​​‌​​​‌‌​​‌​‌​‌‌​​​​‌​‌‌‌​‌​​​‌‌​‌​​​​​‌​‌​​‌​​‌​​​​​​​‌​‌‌‌‌​​‌​​​​​​‌‌​‌‌‌‌​‌‌‌​​‌​​‌‌​‌​​‌​‌‌​​‌‌‌​‌‌​‌​​‌​‌‌​‌‌‌​​‌‌​​​​‌​‌‌​‌‌​​​​‌​​​​​​‌‌​​​‌‌​‌‌​‌‌‌‌​‌‌​​‌​​​‌‌​​‌​‌​​‌​‌‌​​​​‌​​​​​​‌‌​​​​‌​‌‌​‌‌​​​‌‌​‌‌​​​​‌​​​​​​‌‌‌​​‌​​‌‌​‌​​‌​‌‌​​‌‌‌​‌‌​‌​​​​‌‌‌​‌​​​‌‌‌​​‌‌​​‌​​​​​​‌‌‌​​‌​​‌‌​​‌​‌​‌‌‌​​‌‌​‌‌​​‌​‌​‌‌‌​​‌​​‌‌‌​‌‌​​‌‌​​‌​‌​‌‌​​‌​​​​‌​​​​​​​‌​‌‌‌‌​​‌​​​​​​‌​​‌​​​​‌​​​‌‌​​‌​​​‌‌‌​‌​‌​​​​​​‌​‌‌​‌​‌​‌​​‌‌​‌​​‌​​‌​‌​​​‌‌‌​​‌​‌‌​‌​​‌‌​​​‌⁠ ---------- ゲーム内リプレイ (d228, まえ: 動画用ログをゲームの中で再生して走りをチェックしたい) ----------
    Plays a 動画用ログ (hfgp-video-replay, see vlog.js / VIDEO_LOG.md) inside the game. Nothing is simulated again: every
    frame of the file is drawn as it was recorded (position, heading, speed, bank, slip, hop, posture, lever, rudder…),
    so an old log keeps showing the race it recorded even after the physics changes. The game's own drawing (view.js)
@@ -38,7 +38,7 @@ function rpvPrep(d) {
       name: en.name || null, cls: en.class || null, course: en.course || null, wake: [], gone: false, out: null, fin: null, flying: false, passed1M: false, laps: 0, rk: 0, land: land.get(no) || [] };
   });
   const c = H.conditions || {};
-  const env = c.calm ? null : { wx: (c.windVec && c.windVec.wx) || 0, wy: (c.windVec && c.windVec.wy) || 0, rain: !!c.rain, wave: c.wave || 0, dir: c.dir, wind: c.wind || 0, cx: c.tideFlow || 0,
+  const env = c.calm ? null : { wx: (c.windVec && c.windVec.wx) || 0, wy: (c.windVec && c.windVec.wy) || 0, rain: !!c.rain, wave: c.wave || 0, dir: c.dir, wind: c.wind || 0, cx: c.tideFlowVec ? c.tideFlowVec.cx : c.tideFlow || 0, cy: c.tideFlowVec ? c.tideFlowVec.cy : 0,
     stabilizer: !!c.stabilizer, temp: c.temp, tideLv: c.tideLv };
   const solo = H.mode === 'ta';
   const pit = !solo && fr.length && fr[0].slice(1).some(v => v && v[I.x] < -230);

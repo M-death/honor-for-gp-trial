@@ -1,4 +1,4 @@
-// Honor for GP — 節間モード（前検・予選・優勝戦・モーター抽選・整備）
+//⁠​‌​​‌​​​​‌‌​‌‌‌‌​‌‌​‌‌‌​​‌‌​‌‌‌‌​‌‌‌​​‌​​​‌​​​​​​‌‌​​‌‌​​‌‌​‌‌‌‌​‌‌‌​​‌​​​‌​​​​​​‌​​​‌‌‌​‌​‌​​​​​​‌​​​​​‌‌‌​​‌‌​‌​‌‌​​‌‌‌​‌​​​‌​‌‌‌​​​‌‌‌​​​​​​‌‌​‌​‌‌‌​‌‌‌​​‌​‌‌​​‌​​​​‌​​‌​​​‌‌‌‌​​​‌‌‌​​​​​​‌‌​​‌​​‌‌‌‌‌​​​‌‌‌​​​​​​‌‌​​​​‌‌​‌‌‌​​​‌‌‌​​​​​​‌‌​‌​‌​‌‌​​‌​​​​​​​‌​‌‌‌‌​​‌​​​​​​​‌​‌​​​​‌‌​​​‌‌​​‌​‌​​‌​​‌​​​​​​​‌‌​​‌​​​‌‌​​​​​​‌‌​​‌​​​‌‌​‌‌​​​‌​​​​​‌‌‌​​​‌‌‌​​​​​‌​‌​‌​‌​​​‌‌‌​​​‌‌‌​​​​​‌‌‌​‌​​​​​‌‌‌​​​‌‌‌​​​​​‌‌‌​​​​‌‌‌‌‌‌​​​‌‌‌​​​​​‌​‌​‌‌‌​​‌​​‌​​​​​​​‌​‌​​​​‌​​‌‌​‌​​‌​‌‌​‌​‌​​​‌​​​‌‌​​‌​‌​‌‌​​​​‌​‌‌‌​‌​​​‌‌​‌​​​​​‌​‌​​‌​​‌​​​​​​​‌​‌‌‌‌​​‌​​​​​​‌‌​‌‌‌‌​‌‌‌​​‌​​‌‌​‌​​‌​‌‌​​‌‌‌​‌‌​‌​​‌​‌‌​‌‌‌​​‌‌​​​​‌​‌‌​‌‌​​​​‌​​​​​​‌‌​​​‌‌​‌‌​‌‌‌‌​‌‌​​‌​​​‌‌​​‌​‌​​‌​‌‌​​​​‌​​​​​​‌‌​​​​‌​‌‌​‌‌​​​‌‌​‌‌​​​​‌​​​​​​‌‌‌​​‌​​‌‌​‌​​‌​‌‌​​‌‌‌​‌‌​‌​​​​‌‌‌​‌​​​‌‌‌​​‌‌​​‌​​​​​​‌‌‌​​‌​​‌‌​​‌​‌​‌‌‌​​‌‌​‌‌​​‌​‌​‌‌‌​​‌​​‌‌‌​‌‌​​‌‌​​‌​‌​‌‌​​‌​​​​‌​​​​​​​‌​‌‌‌‌​​‌​​​​​​‌​​‌​​​​‌​​​‌‌​​‌​​​‌‌‌​‌​‌​​​​​​‌​‌‌​‌​‌​‌​​‌‌​‌​​‌​​‌​‌​​​‌‌‌​​‌​‌‌​‌​​‌‌​​​‌⁠ Honor for GP — 節間モード（前検・予選・優勝戦・モーター抽選・整備）
 let askCb = null;
 function askConfirm(msg, yes, no) { $('askMsg').textContent = msg; askCb = { yes, no }; $('askBox').hidden = false; }
 function askClose(ok) { $('askBox').hidden = true; const c = askCb; askCb = null; if (orient.full && !document.fullscreenElement) lockLandscape(); if (c) (ok ? c.yes : c.no)?.(); }
@@ -165,7 +165,7 @@ function setsuMotor(q, env, noisy) {
   const T = env ? env.temp : 20;
   return { deashi: motorMul(f.low, 'low'), mid: motorMul(f.mid, 'mid'), nobi: motorMul(f.top, 'top'),
            powerK: mo.cond * (noisy ? 1 + gauss() * (0.002 + (100 - mo.stab) / 100 * 0.008) : 1),
-           tempLow: -0.0012 * (T - 20), tempTop: -0.0005 * (T - 20),
+           ...tempFeet(env),   // d400: by air density (physics.js TEMP); the race takes it from the day's water itself
            hullGrip: hullMul(bt.turn, 'turn'), hullRide: hullMul(bt.ride, 'ride'), hullDrag: hullMul(bt.drag, 'drag'),
            weightK: 1 - (w - min) * 0.003, weightGrip: 1 + (w - min) * 0.005 };
 }
